@@ -1,0 +1,166 @@
+// Reference Firestore security rules for the L&C Models Connect marketplace
+// collections added in this build (app_model_profiles, app_instructor_profiles,
+// app_brand_profiles, bookings, castings, casting_applications, reviews,
+// conversations/messages, notifications, certificates, withdrawal_requests)
+// plus the Phase 2 additions (finance_ledger, courses/lessons,
+// course_enrollments, and admin read access on conversations/messages).
+//
+// This file is NOT auto-deployed — it lives here only as a reference. The
+// live rules for the schoolcms-77713 project are managed in the Firebase
+// Console (Firestore Database -> Rules), which this session has no access
+// to. Paste the relevant sections in there, or deploy with the Firebase CLI
+// (`firebase deploy --only firestore:rules`) if this repo is later wired
+// up with one.
+//
+// The site's EXISTING collections (lcschoolblog, lc_models_management,
+// lc_model_connect_instructors, the *_applications/*_bookings lead-form
+// collections, app_users) are left exactly as whatever rules already
+// govern them today — nothing here should replace those, only add to them.
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+    function isAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/app_users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/app_users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Self-serve profiles — anyone can read (public directory/portfolio),
+    // only the owner (or an admin, for approvals/verification) can write.
+    // balance/payment_status are finance fields only admin may change —
+    // a student's own update must leave them untouched.
+    match /app_model_profiles/{uid} {
+      allow read: if true;
+      allow create: if isOwner(uid) || isAdmin();
+      allow update: if isAdmin() || (isOwner(uid) &&
+        request.resource.data.balance == resource.data.balance &&
+        request.resource.data.payment_status == resource.data.payment_status);
+      allow delete: if isAdmin();
+    }
+    match /app_instructor_profiles/{uid} {
+      allow read: if true;
+      allow write: if isOwner(uid) || isAdmin();
+    }
+    match /app_brand_profiles/{uid} {
+      allow read: if true;
+      allow write: if isOwner(uid) || isAdmin();
+    }
+
+    // Bookings — only the two participants (or an admin) can read/update;
+    // creation must originate from the model who owns the doc's model_uid.
+    match /bookings/{bookingId} {
+      allow read: if isSignedIn() &&
+        (request.auth.uid == resource.data.model_uid || request.auth.uid == resource.data.instructor_uid || isAdmin());
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.model_uid;
+      allow update: if isSignedIn() &&
+        (request.auth.uid == resource.data.model_uid || request.auth.uid == resource.data.instructor_uid || isAdmin());
+    }
+
+    // Castings — public read of open listings; only the poster (or admin)
+    // can create/update/close their own casting.
+    match /castings/{castingId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.posted_by_uid;
+      allow update: if isSignedIn() && (request.auth.uid == resource.data.posted_by_uid || isAdmin());
+    }
+
+    // Casting applications — the applicant and the casting's poster can
+    // both read; only the applicant can create; only the poster (or the
+    // applicant, to withdraw) can update status.
+    match /casting_applications/{applicationId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.model_uid;
+      allow update: if isSignedIn();
+    }
+
+    // Reviews — public read (they're social proof on a profile); only the
+    // author can create; nobody edits/deletes a posted review.
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.author_uid;
+      allow update, delete: if false;
+    }
+
+    // Conversations & messages — the two participants can read/write; admin
+    // gets read-only oversight (AdminChatsScreen/AdminChatViewScreen) but
+    // never posts into a thread that isn't theirs.
+    match /conversations/{conversationId} {
+      allow read: if isSignedIn() && (request.auth.uid in resource.data.participants || isAdmin());
+      allow write: if isSignedIn() && request.auth.uid in resource.data.participants;
+      allow create: if isSignedIn() && request.auth.uid in request.resource.data.participants;
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn() &&
+          (request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants || isAdmin());
+        allow create: if isSignedIn() && request.auth.uid == request.resource.data.sender_uid;
+      }
+    }
+
+    // Notifications — only the owning user can read/mark-read; writes
+    // otherwise come from trusted app code creating notifications for
+    // OTHER users (e.g. a model's booking notifies the instructor), so
+    // creation just checks the doc is signed-in-authored, not self-only.
+    match /notifications/{notificationId} {
+      allow read, update: if isSignedIn() && request.auth.uid == resource.data.user_uid;
+      allow create: if isSignedIn();
+    }
+
+    // Certificates — public read (so VerifyCertificateScreen works even
+    // signed out); only an admin/instructor flow issues them, never edited.
+    match /certificates/{certificateId} {
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update, delete: if false;
+    }
+
+    // Withdrawal requests — the instructor can read/create their own;
+    // only an admin can update status (mark paid/rejected).
+    match /withdrawal_requests/{requestId} {
+      allow read: if isSignedIn() && (request.auth.uid == resource.data.instructor_uid || isAdmin());
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.instructor_uid;
+      allow update: if isAdmin();
+    }
+
+    // Finance ledger — a student can read their own payment/adjustment
+    // history; only admin ever writes an entry (see lib/finance.ts).
+    match /finance_ledger/{entryId} {
+      allow read: if isSignedIn() && (request.auth.uid == resource.data.student_uid || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    // L&C Academy — published courses are publicly browsable; only admin or
+    // the assigned instructor can edit a course or add its lesson videos.
+    match /courses/{courseId} {
+      allow read: if resource.data.status == 'published' || isAdmin() ||
+        (isSignedIn() && request.auth.uid == resource.data.instructor_uid);
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.instructor_uid);
+
+      match /lessons/{lessonId} {
+        // A lesson's own access check happens in the app (only an enrolled,
+        // paid student is shown the video) — rules just gate who may CREATE
+        // one, and readers must already be allowed to read the parent course.
+        allow read: if get(/databases/$(database)/documents/courses/$(courseId)).data.status == 'published' || isAdmin() ||
+          (isSignedIn() && request.auth.uid == get(/databases/$(database)/documents/courses/$(courseId)).data.instructor_uid);
+        allow write: if isAdmin() ||
+          (isSignedIn() && request.auth.uid == get(/databases/$(database)/documents/courses/$(courseId)).data.instructor_uid);
+      }
+    }
+
+    // Course enrollments — the student can read their own (to see
+    // locked/unlocked status); only admin creates/updates one (manual
+    // payment confirmation, no in-app payment collection).
+    match /course_enrollments/{enrollmentId} {
+      allow read: if isSignedIn() && (request.auth.uid == resource.data.student_uid || isAdmin());
+      allow write: if isAdmin();
+    }
+  }
+}

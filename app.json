@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "L&C Modeling Academy",
+    "slug": "lc-modeling-academy",
+    "version": "1.2.2",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "lcmodeling",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#faf9f6",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.lcmodelingacademy.app"
+    },
+    "android": {
+      "package": "com.lcmodelingacademy.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#faf9f6",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "L&C Modeling Academy uses your photos to submit portfolio images (headshots, application photos, blog/model uploads)."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#faf9f6"
+        }
+      ],
+      "expo-image",
+      "expo-video",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "L&C Modeling Academy uses your location to show nearby instructors and estimate distance."
+        }
+      ],
+      "expo-notifications"
+    ]
+  }
+}
