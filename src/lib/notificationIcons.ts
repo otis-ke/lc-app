@@ -18,4 +18,10 @@ export const NOTIFICATION_ICONS: Record<NotificationType, React.ComponentProps<t
   withdrawal_update: 'cash-outline',
   finance_update: 'wallet-outline',
   course_unlocked: 'play-circle-outline',
+  new_instructor_application: 'person-add-outline',
+  new_student_registered: 'person-add-outline',
+  new_user_registered: 'person-circle-outline',
+  application_rejected: 'close-circle-outline',
+  profile_rejected: 'alert-circle-outline',
+  user_reported: 'flag-outline',
 };

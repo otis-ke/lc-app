@@ -10,6 +10,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { colors, fonts, radii, spacing } from '../theme/theme';
+import { useTheme } from '../contexts/ThemeContext';
 
 type Variant = 'primary' | 'gold' | 'outline' | 'ghost' | 'danger';
 
@@ -32,6 +33,7 @@ export function Button({
   fullWidth = true,
   style,
 }: Props) {
+  const { colors: themeColors } = useTheme();
   const isDisabled = disabled || loading;
 
   const handlePress = (e: GestureResponderEvent) => {
@@ -42,7 +44,7 @@ export function Button({
   const content = loading ? (
     <ActivityIndicator color={variant === 'outline' || variant === 'ghost' ? colors.primary : '#fff'} />
   ) : (
-    <Text style={[styles.label, labelStyles[variant]]}>{label}</Text>
+    <Text style={[styles.label, labelStyles[variant], variant === 'ghost' && { color: themeColors.text }]}>{label}</Text>
   );
 
   if (variant === 'primary' || variant === 'gold') {
@@ -72,6 +74,7 @@ export function Button({
       style={({ pressed }) => [
         styles.base,
         variantStyles[variant],
+        variant === 'ghost' && { backgroundColor: themeColors.surfaceAlt },
         fullWidth && styles.fullWidth,
         pressed && styles.pressed,
         isDisabled && styles.disabled,

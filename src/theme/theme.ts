@@ -1,7 +1,12 @@
 // Brand palette carried over from the L&C Modeling Academy website
 // (base.css / admin.css / blog.css) — magenta→blue gradient as the primary
 // accent, gold as a luxury/CTA accent, near-black for editorial dark surfaces.
-export const colors = {
+// Brand accents (primary/secondary/gold/success/danger) are the same in both
+// themes — only the neutrals (backgrounds/surfaces/text/border) swap. See
+// ThemeContext.tsx for the switch itself; `colors` below is mutated in place
+// by that context (never reassigned) so every existing `import { colors }`
+// keeps working without every screen needing to move to a hook.
+const BRAND = {
   primary: '#8a1f66', // magenta/plum — site accent 1
   primaryLight: '#a8377f',
   secondary: '#3a8dff', // blue — site accent 2
@@ -11,19 +16,64 @@ export const colors = {
   success: '#1f8f4e',
   danger: '#d64545',
   dangerDark: '#b23636',
+};
 
-  ink: '#0b0b0c', // near-black surfaces (hero/dark sections)
+export const darkNeutrals = {
+  ink: '#0b0b0c',
+  ink2: '#1c1c22',
+  bg: '#0b0b0c', // near-black canvas — the app's default theme
+  surface: '#18181c',
+  surfaceAlt: '#222227',
+  border: '#3a3226',
+  text: '#d9bd85', // gold body text on the dark default, not plain white
+  textMuted: 'rgba(217,189,133,0.68)',
+  textOnDark: '#d9bd85',
+  textOnDarkMuted: 'rgba(217,189,133,0.7)',
+};
+
+export const lightNeutrals = {
+  ink: '#0b0b0c',
   ink2: '#1c1c22',
   bg: '#faf9f6', // warm off-white canvas
   surface: '#ffffff',
   surfaceAlt: '#f3f1ec',
   border: '#e6e2d8',
-
   text: '#1a1a1d',
   textMuted: '#6b6a70',
   textOnDark: '#f5f3ee',
   textOnDarkMuted: 'rgba(245,243,238,0.7)',
 };
+
+export type ThemeMode = 'dark' | 'light';
+
+// A single mutable object, not a new one per theme — `ThemeContext` calls
+// `applyThemeColors()` to overwrite these properties in place on toggle, so
+// every file that already did `import { colors } from '.../theme'` (the
+// entire app) reads the live palette without switching to a hook.
+export const colors: typeof BRAND & typeof darkNeutrals = { ...BRAND, ...darkNeutrals };
+
+export function applyThemeColors(mode: ThemeMode) {
+  Object.assign(colors, mode === 'dark' ? darkNeutrals : lightNeutrals);
+}
+
+// Web-only synchronous bootstrap. AsyncStorage (used everywhere else, see
+// ThemeContext.tsx) can't be read before the rest of this module — and
+// every screen's own StyleSheet.create — finishes evaluating, so a runtime
+// toggle can only safely update a handful of shared components (nav bars,
+// inputs, buttons) rather than every screen's frozen colors. localStorage,
+// on web, IS synchronous: reading it here, before `typography` below is
+// built, means a full page reload after toggling (see ThemeContext.tsx)
+// genuinely re-themes everything, including colors baked into every
+// screen's own styles. Native has no synchronous equivalent without a new
+// native module, so it keeps the narrower, always-safe reactive scope.
+try {
+  if (typeof localStorage !== 'undefined') {
+    const saved = localStorage.getItem('lc-theme-mode');
+    if (saved === 'light') applyThemeColors('light');
+  }
+} catch {
+  // ignore — storage can be unavailable (private browsing, SSR, etc.)
+}
 
 export const gradients = {
   brand: [colors.primary, colors.secondary] as const,

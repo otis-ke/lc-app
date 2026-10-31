@@ -78,6 +78,31 @@ export async function markAllNotificationsRead(uid: string): Promise<void> {
   await Promise.all(snap.docs.map((d) => updateDoc(d.ref, { read: true })));
 }
 
+// Admin can approve/verify from any device the moment someone applies or
+// registers — every current admin (role == 'admin', which includes the
+// owner/super-admin emails auto-granted in AuthContext) gets a notification
+// + push + in-app pop-up, and a login-time badge count picks it up even if
+// they were offline when it happened.
+export async function fetchAdminUids(): Promise<string[]> {
+  const q = query(collection(db, USERS_COLLECTION), where('role', '==', 'admin'));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => d.id);
+}
+
+export async function notifyAllAdmins(type: NotificationType, title: string, body: string, relatedId: string | null = null): Promise<void> {
+  const adminUids = await fetchAdminUids();
+  await Promise.all(adminUids.map((uid) => createNotification(uid, type, title, body, relatedId)));
+}
+
+// No email-sending backend exists (no Cloud Functions/SendGrid/EmailJS
+// credentials configured for this project) — this opens the device's own
+// mail app pre-addressed to the admin owner emails as a manual fallback,
+// rather than a fake "email sent" that silently does nothing.
+export function buildAdminMailtoLink(subject: string, body: string): string {
+  const to = 'modelinglc@gmail.com,linkosiclothing@gmail.com';
+  return `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
 // Live in-app "pop up" — a Firestore listener works everywhere (web
 // included) without needing an OS push token/EAS project, so it's the
 // reliable fallback that always fires while the app is open. Only calls

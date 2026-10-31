@@ -8,6 +8,7 @@ import { Card } from '../../components/Card';
 import { TextField, RadioGroup } from '../../components/FormFields';
 import { Button } from '../../components/Button';
 import { useAuth } from '../../contexts/AuthContext';
+import { openPrivacyPolicy } from '../../lib/legal';
 import { colors, fonts, spacing, typography } from '../../theme/theme';
 import type { ProfileStackParamList } from '../../navigation/types';
 import type { AccountType } from '../../types';
@@ -142,6 +143,14 @@ export default function SignUpScreen() {
         ) : null}
 
         <Button label="Sign Up" onPress={handleSignUp} loading={loading} style={{ marginTop: spacing.sm }} />
+
+        <Text style={styles.legalText}>
+          By creating an account, you agree to our{' '}
+          <Text style={styles.legalLink} onPress={openPrivacyPolicy}>
+            Privacy Policy
+          </Text>
+          .
+        </Text>
       </Card>
 
       <View style={styles.footerRow}>
@@ -169,6 +178,15 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   errorText: { flex: 1, fontFamily: fonts.body, fontSize: 13, color: colors.dangerDark, lineHeight: 18 },
+  legalText: {
+    fontFamily: fonts.body,
+    fontSize: 12,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+    lineHeight: 17,
+  },
+  legalLink: { fontFamily: fonts.bodySemiBold, color: colors.primary },
   footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: spacing.lg },
   footerText: { fontFamily: fonts.body, fontSize: 14, color: colors.textMuted },
   footerLink: { fontFamily: fonts.bodySemiBold, fontSize: 14, color: colors.primary },

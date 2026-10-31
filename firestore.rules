@@ -33,6 +33,16 @@ service cloud.firestore {
         get(/databases/$(database)/documents/app_users/$(request.auth.uid)).data.role == 'admin';
     }
 
+    // app_users IS covered elsewhere per the file header, but two newer
+    // features need the owner to write/delete their own doc here:
+    //  - "Delete Account" (AuthContext.tsx's deleteAccount) needs
+    //    `allow delete: if isOwner(uid) || isAdmin();`
+    //  - Block/Report (lib/moderation.ts) writes `blocked_uids` on the
+    //    owner's own doc, so the existing self-update rule must allow it
+    //    (no admin-only fields are touched, so a plain isOwner(uid) check
+    //    on update is enough).
+    // Confirm the LIVE rule in Firebase Console covers both.
+
     // Self-serve profiles — anyone can read (public directory/portfolio),
     // only the owner (or an admin, for approvals/verification) can write.
     // balance/payment_status are finance fields only admin may change —
@@ -43,7 +53,9 @@ service cloud.firestore {
       allow update: if isAdmin() || (isOwner(uid) &&
         request.resource.data.balance == resource.data.balance &&
         request.resource.data.payment_status == resource.data.payment_status);
-      allow delete: if isAdmin();
+      // Owner delete is required for the in-app "Delete Account" flow
+      // (Play Store policy requires self-serve account/data deletion).
+      allow delete: if isAdmin() || isOwner(uid);
     }
     match /app_instructor_profiles/{uid} {
       allow read: if true;
@@ -161,6 +173,21 @@ service cloud.firestore {
     match /course_enrollments/{enrollmentId} {
       allow read: if isSignedIn() && (request.auth.uid == resource.data.student_uid || isAdmin());
       allow write: if isAdmin();
+    }
+
+    // Admin audit log — every approve/reject/finance decision, admin-only in
+    // both directions (not even the target user can read their own entry;
+    // they get a notification instead — see lib/notifications.ts).
+    match /admin_audit_log/{entryId} {
+      allow read, write: if isAdmin();
+    }
+
+    // User reports — the Play Store UGC-policy report/block flow
+    // (lib/moderation.ts). Anyone signed in can file one about themselves
+    // as reporter; only admin can read/resolve them.
+    match /user_reports/{reportId} {
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.reporter_uid;
+      allow read, update, delete: if isAdmin();
     }
   }
 }

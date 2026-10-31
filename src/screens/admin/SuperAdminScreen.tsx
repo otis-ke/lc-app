@@ -34,6 +34,8 @@ export default function SuperAdminScreen() {
     { icon: 'cash-outline', title: 'Withdrawals', subtitle: 'Instructor payout requests', onPress: () => navigation.navigate('AdminWithdrawals') },
     { icon: 'school-outline', title: 'Courses', subtitle: 'L&C Academy content', onPress: () => navigation.navigate('AdminCourses') },
     { icon: 'chatbubbles-outline', title: 'Conversations', subtitle: 'Every student ↔ instructor thread', onPress: () => navigation.navigate('AdminChats') },
+    { icon: 'analytics-outline', title: 'Analytics', subtitle: 'Signups, approvals, courses & finance', onPress: () => navigation.navigate('AdminAnalytics') },
+    { icon: 'document-text-outline', title: 'Audit Log', subtitle: 'Every approve/reject decision made', onPress: () => navigation.navigate('AdminAuditLog') },
   ];
 
   return (

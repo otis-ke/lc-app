@@ -1,7 +1,7 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { DashboardStackParamList } from './types';
-import { screenOptions } from './navOptions';
+import { useScreenOptions } from './navOptions';
 import DashboardHomeScreen from '../screens/dashboard/DashboardHomeScreen';
 import MyPortfolioScreen from '../screens/dashboard/MyPortfolioScreen';
 import InstructorProfileEditScreen from '../screens/dashboard/InstructorProfileEditScreen';
@@ -27,6 +27,9 @@ import MyCertificatesScreen from '../screens/dashboard/MyCertificatesScreen';
 import VerifyCertificateScreen from '../screens/dashboard/VerifyCertificateScreen';
 import AdminOverviewScreen from '../screens/admin/AdminOverviewScreen';
 import AdminApprovalsScreen from '../screens/admin/AdminApprovalsScreen';
+import InstructorApplicationDetailScreen from '../screens/admin/InstructorApplicationDetailScreen';
+import AdminAuditLogScreen from '../screens/admin/AdminAuditLogScreen';
+import AdminAnalyticsScreen from '../screens/admin/AdminAnalyticsScreen';
 import AdminWithdrawalsScreen from '../screens/admin/AdminWithdrawalsScreen';
 import AdminStudentsScreen from '../screens/admin/AdminStudentsScreen';
 import AdminStudentFinanceScreen from '../screens/admin/AdminStudentFinanceScreen';
@@ -44,7 +47,7 @@ const Stack = createNativeStackNavigator<DashboardStackParamList>();
 
 export function DashboardStack() {
   return (
-    <Stack.Navigator screenOptions={screenOptions}>
+    <Stack.Navigator screenOptions={useScreenOptions()}>
       <Stack.Screen name="DashboardHome" component={DashboardHomeScreen} options={{ headerShown: false }} />
       <Stack.Screen name="MyPortfolio" component={MyPortfolioScreen} options={{ title: 'My Portfolio' }} />
       <Stack.Screen
@@ -94,6 +97,9 @@ export function DashboardStack() {
       <Stack.Screen name="VerifyCertificate" component={VerifyCertificateScreen} options={{ title: 'Verify Certificate' }} />
       <Stack.Screen name="AdminOverview" component={AdminOverviewScreen} options={{ title: 'Business Overview' }} />
       <Stack.Screen name="AdminApprovals" component={AdminApprovalsScreen} options={{ title: 'Approvals' }} />
+      <Stack.Screen name="InstructorApplicationDetail" component={InstructorApplicationDetailScreen} options={{ title: 'Application' }} />
+      <Stack.Screen name="AdminAuditLog" component={AdminAuditLogScreen} options={{ title: 'Audit Log' }} />
+      <Stack.Screen name="AdminAnalytics" component={AdminAnalyticsScreen} options={{ title: 'Analytics' }} />
       <Stack.Screen name="AdminWithdrawals" component={AdminWithdrawalsScreen} options={{ title: 'Withdrawals' }} />
       <Stack.Screen name="AdminStudents" component={AdminStudentsScreen} options={{ title: 'Students' }} />
       <Stack.Screen name="AdminStudentFinance" component={AdminStudentFinanceScreen} options={({ route }) => ({ title: route.params.studentName })} />

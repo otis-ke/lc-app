@@ -17,9 +17,15 @@ import {
 } from '@expo-google-fonts/playfair-display';
 import { View } from 'react-native';
 import { AuthProvider } from './src/contexts/AuthContext';
+import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { OfflineBanner } from './src/components/OfflineBanner';
 import { colors } from './src/theme/theme';
+
+function ThemedStatusBar() {
+  const { mode } = useTheme();
+  return <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />;
+}
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -43,11 +49,13 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }} onLayout={onLayout}>
       <SafeAreaProvider style={{ backgroundColor: colors.bg }}>
-        <AuthProvider>
-          <RootNavigator />
-          <OfflineBanner />
-          <StatusBar style="dark" />
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <RootNavigator />
+            <OfflineBanner />
+            <ThemedStatusBar />
+          </AuthProvider>
+        </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

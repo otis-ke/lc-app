@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -8,7 +8,10 @@ import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { RadioGroup } from '../../components/FormFields';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { countUnreadNotifications } from '../../lib/notifications';
+import { fetchPendingInstructorApplications } from '../../lib/instructors';
+import { fetchAllStudents } from '../../lib/finance';
 import { colors, fonts, radii, spacing, typography } from '../../theme/theme';
 import type { DashboardStackParamList } from '../../navigation/types';
 import type { AccountType } from '../../types';
@@ -24,14 +27,15 @@ interface DashCard {
 }
 
 function DashboardCard({ icon, title, subtitle, onPress }: DashCard) {
+  const { colors } = useTheme();
   return (
-    <Pressable style={styles.card} onPress={onPress}>
-      <View style={styles.cardIcon}>
+    <Pressable style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={onPress}>
+      <View style={[styles.cardIcon, { backgroundColor: colors.surfaceAlt }]}>
         <Ionicons name={icon} size={20} color={colors.primary} />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={styles.cardTitle}>{title}</Text>
-        <Text style={styles.cardSubtitle}>{subtitle}</Text>
+        <Text style={[styles.cardTitle, { color: colors.text }]}>{title}</Text>
+        <Text style={[styles.cardSubtitle, { color: colors.textMuted }]}>{subtitle}</Text>
       </View>
       <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
     </Pressable>
@@ -50,10 +54,41 @@ export default function DashboardHomeScreen() {
   const [pickerValue, setPickerValue] = useState(ACCOUNT_TYPE_OPTIONS[0].label);
   const [saving, setSaving] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const shownApprovalPrompt = useRef(false);
 
   useEffect(() => {
     if (session) countUnreadNotifications(session.uid).then(setUnreadCount).catch(() => {});
   }, [session]);
+
+  // Pop up once per app open when admin/super admin has something waiting —
+  // covers both "approve an instructor" and "approve/enroll a student"
+  // without needing to already be inside the Approvals screen to notice.
+  useEffect(() => {
+    if (!isAdmin || shownApprovalPrompt.current) return;
+    shownApprovalPrompt.current = true;
+    (async () => {
+      try {
+        const [pendingApps, students] = await Promise.all([
+          fetchPendingInstructorApplications(),
+          fetchAllStudents(),
+        ]);
+        const unverifiedStudents = students.filter((s) => s.review_status === 'pending');
+        if (pendingApps.length === 0 && unverifiedStudents.length === 0) return;
+
+        const parts: string[] = [];
+        if (pendingApps.length > 0) parts.push(`${pendingApps.length} instructor application${pendingApps.length === 1 ? '' : 's'}`);
+        if (unverifiedStudents.length > 0) parts.push(`${unverifiedStudents.length} student${unverifiedStudents.length === 1 ? '' : 's'}`);
+
+        Alert.alert('Pending Approvals', `${parts.join(' and ')} awaiting your review.`, [
+          ...(pendingApps.length > 0 ? [{ text: 'Review Instructors', onPress: () => navigation.navigate('AdminApprovals') }] : []),
+          ...(unverifiedStudents.length > 0 ? [{ text: 'Review Students', onPress: () => navigation.navigate('AdminStudents') }] : []),
+          { text: 'Later', style: 'cancel' as const },
+        ]);
+      } catch {
+        // silent — this is a convenience nudge, not a required flow
+      }
+    })();
+  }, [isAdmin]);
 
   if (!session) {
     return (
@@ -89,6 +124,8 @@ export default function DashboardHomeScreen() {
     { icon: 'people-outline', title: 'Students', subtitle: 'Balances & payment status', onPress: () => navigation.navigate('AdminStudents') },
     { icon: 'chatbubbles-outline', title: 'Conversations', subtitle: 'Oversee student ↔ instructor chats', onPress: () => navigation.navigate('AdminChats') },
     { icon: 'school-outline', title: 'Courses', subtitle: 'Create courses & lesson videos', onPress: () => navigation.navigate('AdminCourses') },
+    { icon: 'analytics-outline', title: 'Analytics', subtitle: 'Signups, approvals, courses & finance', onPress: () => navigation.navigate('AdminAnalytics') },
+    { icon: 'document-text-outline', title: 'Audit Log', subtitle: 'Every approve/reject decision made', onPress: () => navigation.navigate('AdminAuditLog') },
   ];
 
   if (isSuperAdmin) {
@@ -133,6 +170,9 @@ export default function DashboardHomeScreen() {
 
   return (
     <Screen>
+      {/* headerTitle/sectionLabel sit directly on Screen's background, which
+          stays pinned to the dark default (see Screen.tsx) — content inside
+          a <Card> below reacts safely since its own background reacts too. */}
       <Text style={styles.headerTitle}>{roleTitle || 'Dashboard'}</Text>
 
       {!profile?.account_type ? (

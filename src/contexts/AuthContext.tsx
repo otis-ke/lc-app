@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import {
   createUserWithEmailAndPassword,
+  deleteUser,
   onAuthStateChanged,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
@@ -8,9 +9,10 @@ import {
   updateProfile,
   type User,
 } from 'firebase/auth';
-import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { deleteDoc, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { registerForPushToken } from '../lib/push';
+import { notifyAllAdmins } from '../lib/notifications';
 import type { AccountType, Profile } from '../types';
 
 // New collection (doesn't exist on the original site — it never had real
@@ -41,6 +43,7 @@ interface AuthContextValue {
   refreshProfile: () => Promise<void>;
   setAccountType: (accountType: AccountType) => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: string | null }>;
+  deleteAccount: () => Promise<{ error: string | null }>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -123,6 +126,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             account_type: accountType,
             created_at: serverTimestamp(),
           });
+          notifyAllAdmins(
+            'new_user_registered',
+            'New user registered',
+            `${fullName} (${email}) just created an account${accountType ? ` as a ${accountType}` : ''}.`
+          ).catch(() => {});
           return { error: null };
         } catch (e: any) {
           return { error: friendlyAuthError(e) };
@@ -144,6 +152,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await sendPasswordResetEmail(auth, email);
           return { error: null };
         } catch (e: any) {
+          return { error: friendlyAuthError(e) };
+        }
+      },
+      async deleteAccount() {
+        const user = auth.currentUser;
+        if (!user) return { error: 'You need to be signed in.' };
+        try {
+          // Best-effort: remove the profile docs that identify this user.
+          // Firestore rules let a user delete only their own docs, so these
+          // run before the Auth user itself is gone (after which they'd be
+          // denied). Conversation/message history is intentionally left in
+          // place — see the Privacy Policy section on data retention.
+          await Promise.all([
+            deleteDoc(doc(db, USERS_COLLECTION, user.uid)).catch(() => {}),
+            deleteDoc(doc(db, 'app_model_profiles', user.uid)).catch(() => {}),
+            deleteDoc(doc(db, 'app_instructor_profiles', user.uid)).catch(() => {}),
+          ]);
+          await deleteUser(user);
+          return { error: null };
+        } catch (e: any) {
+          if (e?.code === 'auth/requires-recent-login') {
+            return { error: 'For your security, please sign out and sign in again before deleting your account.' };
+          }
           return { error: friendlyAuthError(e) };
         }
       },

@@ -1,7 +1,8 @@
 import { collection, doc, getDoc, getDocs, orderBy, query, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { toISO } from './content';
-import { createNotification } from './notifications';
+import { createNotification, notifyAllAdmins } from './notifications';
+import { logAdminAction } from './adminLog';
 import type { AppModelProfile, DevelopmentProgress } from '../types';
 import { EMPTY_DEVELOPMENT } from '../types';
 
@@ -31,6 +32,8 @@ export function mapModelProfile(id: string, data: Record<string, any>): AppModel
     availability_notes: data.availability_notes ?? null,
     development: { ...EMPTY_DEVELOPMENT, ...(data.development ?? {}) },
     verified: !!data.verified,
+    review_status: data.review_status ?? (data.verified ? 'approved' : 'pending'),
+    review_note: data.review_note ?? null,
     rating_avg: typeof data.rating_avg === 'number' ? data.rating_avg : 0,
     rating_count: typeof data.rating_count === 'number' ? data.rating_count : 0,
     balance: typeof data.balance === 'number' ? data.balance : 0,
@@ -58,7 +61,17 @@ export async function saveMyModelProfile(
   data: Partial<
     Omit<
       AppModelProfile,
-      'id' | 'created_at' | 'updated_at' | 'verified' | 'rating_avg' | 'rating_count' | 'balance' | 'payment_status' | 'geo'
+      | 'id'
+      | 'created_at'
+      | 'updated_at'
+      | 'verified'
+      | 'review_status'
+      | 'review_note'
+      | 'rating_avg'
+      | 'rating_count'
+      | 'balance'
+      | 'payment_status'
+      | 'geo'
     >
   >,
   isNew: boolean
@@ -68,12 +81,30 @@ export async function saveMyModelProfile(
     {
       ...data,
       ...(isNew
-        ? { created_at: serverTimestamp(), verified: false, rating_avg: 0, rating_count: 0, balance: 0, payment_status: 'unpaid', geo: null }
+        ? {
+            created_at: serverTimestamp(),
+            verified: false,
+            review_status: 'pending',
+            review_note: null,
+            rating_avg: 0,
+            rating_count: 0,
+            balance: 0,
+            payment_status: 'unpaid',
+            geo: null,
+          }
         : {}),
       updated_at: serverTimestamp(),
     },
     { merge: true }
   );
+  if (isNew) {
+    const name = typeof data.full_name === 'string' && data.full_name ? data.full_name : 'A new student';
+    await notifyAllAdmins(
+      'new_student_registered',
+      'New student registered',
+      `${name} created a portfolio — review and approve them under Students.`
+    ).catch(() => {});
+  }
 }
 
 export async function updateModelDevelopment(uid: string, development: DevelopmentProgress): Promise<void> {
@@ -97,11 +128,62 @@ export async function fetchModelDirectory(): Promise<AppModelProfile[]> {
 }
 
 // Admin action: mark a student's profile as approved/verified (mirrors the
-// instructor approval flow) — shows a verified badge and lets admin track
-// who's been reviewed.
-export async function setStudentVerified(uid: string, verified: boolean): Promise<void> {
-  await setDoc(doc(db, COLLECTION, uid), { verified }, { merge: true });
+// instructor approval flow) — shows a verified badge, notifies the student,
+// and logs the decision so it's reviewable later.
+export async function setStudentVerified(
+  uid: string,
+  verified: boolean,
+  studentName: string,
+  adminUid: string,
+  adminName: string
+): Promise<void> {
+  await setDoc(
+    doc(db, COLLECTION, uid),
+    { verified, review_status: verified ? 'approved' : 'pending', review_note: null },
+    { merge: true }
+  );
   if (verified) {
     await createNotification(uid, 'profile_approved', "You're approved!", 'Your student profile has been reviewed and approved by admin.');
+    await logAdminAction({
+      action: 'student_approved',
+      targetType: 'student',
+      targetUid: uid,
+      targetName: studentName,
+      performedByUid: adminUid,
+      performedByName: adminName,
+    });
   }
+}
+
+// Admin action: explicitly decline a student profile (e.g. incomplete or
+// inappropriate submission) — distinct from simply "not yet reviewed".
+export async function rejectStudentProfile(
+  uid: string,
+  studentName: string,
+  adminUid: string,
+  adminName: string,
+  reason?: string
+): Promise<void> {
+  await setDoc(
+    doc(db, COLLECTION, uid),
+    { verified: false, review_status: 'rejected', review_note: reason ?? null },
+    { merge: true }
+  );
+  await createNotification(
+    uid,
+    'profile_rejected',
+    'Profile update needed',
+    reason
+      ? `Your student profile wasn't approved: ${reason}. Update it and you can be reviewed again.`
+      : "Your student profile wasn't approved yet. Please review your details and try again."
+  );
+  await logAdminAction({
+    action: 'student_rejected',
+    targetType: 'student',
+    targetUid: uid,
+    targetName: studentName,
+    performedByUid: adminUid,
+    performedByName: adminName,
+    note: reason,
+  });
 }

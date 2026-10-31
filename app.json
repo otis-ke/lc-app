@@ -2,7 +2,7 @@
   "expo": {
     "name": "L&C Modeling Academy",
     "slug": "lc-modeling-academy",
-    "version": "1.2.2",
+    "version": "1.4.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "lcmodeling",
@@ -20,7 +20,10 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -29,7 +32,9 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "L&C Modeling Academy uses your photos to submit portfolio images (headshots, application photos, blog/model uploads)."
+          "photosPermission": "L&C Modeling Academy uses your photos to submit portfolio images (headshots, application photos, blog/model uploads).",
+          "cameraPermission": false,
+          "microphonePermission": false
         }
       ],
       [
@@ -46,7 +51,7 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "L&C Modeling Academy uses your location to show nearby instructors and estimate distance."
+          "locationWhenInUsePermission": "L&C Modeling Academy uses your location to show nearby instructors and estimate distance."
         }
       ],
       "expo-notifications"

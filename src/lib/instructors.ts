@@ -13,6 +13,7 @@ import {
 import { db } from './firebase';
 import { toISO } from './content';
 import { createNotification } from './notifications';
+import { logAdminAction } from './adminLog';
 import type {
   AppInstructorProfile,
   AvailabilitySlot,
@@ -104,6 +105,9 @@ function mapApplication(id: string, data: Record<string, any>): InstructorApplic
     specialization: data.specialization ?? '',
     socials: data.socials ?? null,
     status: data.status ?? 'new',
+    review_note: data.review_note ?? null,
+    reviewed_by_name: data.reviewed_by_name ?? null,
+    reviewed_at: data.reviewed_at ? toISO(data.reviewed_at) : null,
     created_at: toISO(data.created_at),
   };
 }
@@ -118,10 +122,33 @@ export async function fetchPendingInstructorApplications(): Promise<InstructorAp
   return snap.docs.map((d) => mapApplication(d.id, d.data()));
 }
 
+// History for the audit view — every application admin has already acted
+// on (approved into 'contacted', or declined into 'closed').
+export async function fetchResolvedInstructorApplications(): Promise<InstructorApplication[]> {
+  const q = query(
+    collection(db, APPLICATIONS_COLLECTION),
+    where('status', 'in', ['contacted', 'closed']),
+    orderBy('created_at', 'desc')
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => mapApplication(d.id, d.data()));
+}
+
+export async function fetchInstructorApplication(applicationId: string): Promise<InstructorApplication | null> {
+  const snap = await getDoc(doc(db, APPLICATIONS_COLLECTION, applicationId));
+  return snap.exists() ? mapApplication(snap.id, snap.data()) : null;
+}
+
 // Approving links the application to a real app_instructor_profiles doc
 // keyed by the applicant's uid (only possible when they applied while
 // signed in — see BecomeInstructorScreen). Rejecting just closes the lead.
-export async function approveInstructorApplication(application: InstructorApplication): Promise<void> {
+// Both record who made the call and when (reviewed_by_name/reviewed_at) and
+// append to the admin audit log, so every decision stays reviewable.
+export async function approveInstructorApplication(
+  application: InstructorApplication,
+  adminUid: string,
+  adminName: string
+): Promise<void> {
   if (!application.uid) {
     throw new Error('This application was submitted without an account and cannot be approved into a profile.');
   }
@@ -146,17 +173,58 @@ export async function approveInstructorApplication(application: InstructorApplic
     },
     { merge: true }
   );
-  await updateDoc(doc(db, APPLICATIONS_COLLECTION, application.id), { status: 'contacted' });
+  await updateDoc(doc(db, APPLICATIONS_COLLECTION, application.id), {
+    status: 'contacted',
+    reviewed_by_name: adminName,
+    reviewed_at: serverTimestamp(),
+  });
   await createNotification(
     application.uid,
     'instructor_approved',
     "You're approved!",
     "Your instructor application was approved — set your price and availability to start taking bookings."
   );
+  await logAdminAction({
+    action: 'instructor_approved',
+    targetType: 'instructor',
+    targetUid: application.uid,
+    targetName: application.full_name,
+    performedByUid: adminUid,
+    performedByName: adminName,
+  });
 }
 
-export async function rejectInstructorApplication(applicationId: string): Promise<void> {
-  await updateDoc(doc(db, APPLICATIONS_COLLECTION, applicationId), { status: 'closed' });
+export async function rejectInstructorApplication(
+  application: InstructorApplication,
+  adminUid: string,
+  adminName: string,
+  reason?: string
+): Promise<void> {
+  await updateDoc(doc(db, APPLICATIONS_COLLECTION, application.id), {
+    status: 'closed',
+    review_note: reason ?? null,
+    reviewed_by_name: adminName,
+    reviewed_at: serverTimestamp(),
+  });
+  if (application.uid) {
+    await createNotification(
+      application.uid,
+      'application_rejected',
+      'Application update',
+      reason
+        ? `Your instructor application wasn't approved this time: ${reason}`
+        : "Your instructor application wasn't approved this time. You're welcome to re-apply once you've updated your details."
+    );
+  }
+  await logAdminAction({
+    action: 'instructor_rejected',
+    targetType: 'instructor',
+    targetUid: application.uid ?? application.id,
+    targetName: application.full_name,
+    performedByUid: adminUid,
+    performedByName: adminName,
+    note: reason,
+  });
 }
 
 // -------------------------------------------------------- Withdrawals -----

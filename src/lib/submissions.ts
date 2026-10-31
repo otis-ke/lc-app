@@ -1,5 +1,6 @@
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase';
+import { notifyAllAdmins } from './notifications';
 
 // The original site only ever emailed these forms via EmailJS — nothing was
 // queryable afterwards. We persist them as new collections in the same
@@ -22,8 +23,15 @@ export const submitModelBooking = (row: Record<string, unknown>) => insertRow('m
 
 export const submitEnrollment = (row: Record<string, unknown>) => insertRow('enrollments', row);
 
-export const submitInstructorApplication = (row: Record<string, unknown>) =>
-  insertRow('instructor_applications', row);
+export async function submitInstructorApplication(row: Record<string, unknown>) {
+  await insertRow('instructor_applications', row);
+  const name = typeof row.full_name === 'string' ? row.full_name : 'Someone';
+  await notifyAllAdmins(
+    'new_instructor_application',
+    'New instructor application',
+    `${name} applied to become an instructor — review it in Approvals.`
+  ).catch(() => {});
+}
 
 export const submitInstructorBooking = (row: Record<string, unknown>) =>
   insertRow('instructor_bookings', row);

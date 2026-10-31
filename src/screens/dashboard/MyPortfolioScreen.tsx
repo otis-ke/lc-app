@@ -2,13 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import * as Location from 'expo-location';
 import { Screen } from '../../components/Screen';
 import { Card, SectionTitle } from '../../components/Card';
 import { TextField, TextAreaField, CheckboxGroup } from '../../components/FormFields';
 import { Button } from '../../components/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { fetchMyModelProfile, saveModelLocation, saveMyModelProfile } from '../../lib/models';
+import { describeLocationDenial, requestLocationFromGesture } from '../../lib/location';
 import { pickImage, uploadImage } from '../../lib/uploadImage';
 import { colors, fonts, radii, spacing, typography } from '../../theme/theme';
 import type { AppModelProfile, GeoPoint } from '../../types';
@@ -71,21 +71,19 @@ export default function MyPortfolioScreen() {
   async function handleUseMyLocation() {
     if (!session) return;
     setLocating(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Location permission needed', 'Enable location access so nearby instructors and students can find you.');
-        return;
-      }
-      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      await saveModelLocation(session.uid, position.coords.latitude, position.coords.longitude);
-      setGeo({ lat: position.coords.latitude, lng: position.coords.longitude, updated_at: new Date().toISOString() });
-      Alert.alert('Location saved', 'Nearby instructors and students can now see how far away you are.');
-    } catch (e: any) {
-      Alert.alert('Could not get location', e?.message ?? 'Please try again.');
-    } finally {
-      setLocating(false);
+    const result = await requestLocationFromGesture();
+    setLocating(false);
+    if (result.status === 'denied') {
+      Alert.alert('Location permission needed', describeLocationDenial(result.canAskAgain));
+      return;
     }
+    if (result.status === 'unavailable') {
+      Alert.alert('Could not get location', result.message);
+      return;
+    }
+    await saveModelLocation(session.uid, result.lat, result.lng);
+    setGeo({ lat: result.lat, lng: result.lng, updated_at: new Date().toISOString() });
+    Alert.alert('Location saved', 'Nearby instructors and students can now see how far away you are.');
   }
 
   async function handleAddPhoto() {

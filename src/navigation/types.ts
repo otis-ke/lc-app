@@ -27,6 +27,7 @@ export type ConnectStackParamList = {
   InstructorProfileDetail: { uid: string };
   SelectSlot: { instructorUid: string; instructorName: string };
   BookingConfirmed: { bookingId: string; course: string; date: string; timeSlot: string; price: number };
+  NearbyMap: undefined;
 };
 
 export type BlogStackParamList = {
@@ -99,6 +100,7 @@ export type DashboardStackParamList = {
   // Admin business dashboard (native — separate from the WebView content admin)
   AdminOverview: undefined;
   AdminApprovals: undefined;
+  InstructorApplicationDetail: { applicationId: string };
   AdminWithdrawals: undefined;
   AdminStudents: undefined;
   AdminStudentFinance: { studentUid: string; studentName: string };
@@ -106,6 +108,8 @@ export type DashboardStackParamList = {
   AdminChatView: { conversationId: string; title: string };
   AdminCourses: undefined;
   AdminCourseEditor: { courseId?: string } | undefined;
+  AdminAuditLog: undefined;
+  AdminAnalytics: undefined;
   SuperAdmin: undefined;
 };
 

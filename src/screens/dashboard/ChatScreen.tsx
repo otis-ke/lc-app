@@ -1,19 +1,24 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useRoute, RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { ensureConversation, sendMessage, subscribeToMessages } from '../../lib/messages';
 import { pickImage, uploadImage } from '../../lib/uploadImage';
+import { blockUser, reportUser } from '../../lib/moderation';
 import { colors, fonts, radii, spacing } from '../../theme/theme';
 import type { DashboardStackParamList } from '../../navigation/types';
 import type { Message } from '../../types';
 
 type Rt = RouteProp<DashboardStackParamList, 'Chat'>;
+type Nav = NativeStackNavigationProp<DashboardStackParamList, 'Chat'>;
+
+const REPORT_REASONS = ['Harassment or abuse', 'Inappropriate content', 'Spam or scam', 'Other'];
 
 // A message's own component (not an inline renderItem) so expo-video's
 // useVideoPlayer hook — which must run unconditionally — only ever mounts
@@ -57,6 +62,7 @@ function ChatBubble({ item, mine }: { item: Message; mine: boolean }) {
 
 export default function ChatScreen() {
   const route = useRoute<Rt>();
+  const navigation = useNavigation<Nav>();
   const { otherUid, otherName } = route.params;
   const { session, profile } = useAuth();
   // The floating tab bar renders above every screen (it's never hidden per
@@ -69,6 +75,70 @@ export default function ChatScreen() {
   const [sending, setSending] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const listRef = useRef<FlatList<Message>>(null);
+
+  // Play Store's User Generated Content policy requires a report/block path
+  // on any screen with user-to-user messaging.
+  function handleReport() {
+    Alert.alert(
+      `Report ${otherName}`,
+      'What’s the issue? Our team will review this conversation.',
+      [
+        ...REPORT_REASONS.map((reason) => ({
+          text: reason,
+          onPress: async () => {
+            if (!session) return;
+            await reportUser(
+              session.uid,
+              profile?.full_name ?? profile?.email ?? 'Someone',
+              otherUid,
+              otherName,
+              reason,
+              conversationId ?? undefined
+            ).catch(() => {});
+            Alert.alert('Report sent', 'Thanks — our team will take a look.');
+          },
+        })),
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  }
+
+  function handleBlock() {
+    Alert.alert(
+      `Block ${otherName}?`,
+      'You won’t be able to message each other anymore.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Block',
+          style: 'destructive',
+          onPress: async () => {
+            if (!session) return;
+            await blockUser(session.uid, otherUid);
+            navigation.goBack();
+          },
+        },
+      ]
+    );
+  }
+
+  function handleMenu() {
+    Alert.alert(otherName, undefined, [
+      { text: 'Report', onPress: handleReport },
+      { text: 'Block', style: 'destructive', onPress: handleBlock },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <Pressable onPress={handleMenu} hitSlop={10} style={{ paddingHorizontal: 4 }}>
+          <Ionicons name="ellipsis-horizontal" size={22} color={colors.text} />
+        </Pressable>
+      ),
+    });
+  }, [navigation, otherName, conversationId]);
 
   useEffect(() => {
     if (!session) return;
@@ -97,6 +167,8 @@ export default function ChatScreen() {
     setSending(true);
     try {
       await sendMessage(conversationId, session.uid, value);
+    } catch (e: any) {
+      Alert.alert('Message not sent', e?.message ?? 'Please try again.');
     } finally {
       setSending(false);
     }

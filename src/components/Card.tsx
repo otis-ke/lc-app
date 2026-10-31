@@ -2,6 +2,10 @@ import React from 'react';
 import { StyleSheet, View, ViewProps, Text } from 'react-native';
 import { colors, fonts, radii, shadow, spacing, typography } from '../theme/theme';
 
+// Deliberately NOT theme-reactive, same reasoning as Screen.tsx: Card is
+// used everywhere, including directly on Screen's (frozen dark) canvas, so
+// its own background must stay paired with the same frozen default rather
+// than risk a light/dark text-on-background mismatch.
 export function Card({ style, children, ...rest }: ViewProps) {
   return (
     <View style={[styles.card, style]} {...rest}>

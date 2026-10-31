@@ -12,6 +12,7 @@ import { db } from './firebase';
 import { toISO } from './content';
 import { createNotification } from './notifications';
 import { mapModelProfile } from './models';
+import { logAdminAction } from './adminLog';
 import type { AppModelProfile, FinanceLedgerEntry, LedgerEntryType, PaymentStatus } from '../types';
 
 const LEDGER_COLLECTION = 'finance_ledger';
@@ -75,12 +76,36 @@ export async function recordLedgerEntry(input: {
     input.amount >= 0 ? 'Payment recorded' : 'Balance updated',
     `${input.note} (${input.amount >= 0 ? '+' : ''}KSh ${input.amount.toLocaleString()})`
   );
+  await logAdminAction({
+    action: 'payment_recorded',
+    targetType: 'student',
+    targetUid: input.studentUid,
+    targetName: input.studentName,
+    performedByUid: input.recordedByUid,
+    performedByName: input.recordedByName,
+    note: `${input.type}: KSh ${input.amount.toLocaleString()} — ${input.note}`,
+  });
 }
 
-export async function setPaymentStatus(studentUid: string, status: PaymentStatus): Promise<void> {
+export async function setPaymentStatus(
+  studentUid: string,
+  status: PaymentStatus,
+  studentName: string,
+  adminUid: string,
+  adminName: string
+): Promise<void> {
   await runTransaction(db, async (tx) => {
     const ref = doc(db, MODEL_PROFILES_COLLECTION, studentUid);
     tx.set(ref, { payment_status: status }, { merge: true });
+  });
+  await logAdminAction({
+    action: 'payment_status_changed',
+    targetType: 'student',
+    targetUid: studentUid,
+    targetName: studentName,
+    performedByUid: adminUid,
+    performedByName: adminName,
+    note: `Set to ${status}`,
   });
 }
 

@@ -14,6 +14,7 @@ import { db } from './firebase';
 import { toISO } from './content';
 import { createNotification } from './notifications';
 import { decryptMessageText, encryptMessageText } from './crypto';
+import { isEitherBlocked } from './moderation';
 import type { Conversation, MediaType, Message } from '../types';
 
 const CONVERSATIONS_COLLECTION = 'conversations';
@@ -81,6 +82,11 @@ export async function sendMessage(
   media?: { url: string; type: MediaType }
 ): Promise<void> {
   const convRef = doc(db, CONVERSATIONS_COLLECTION, conversationId);
+  const convSnapBeforeSend = await getDoc(convRef);
+  const otherUidBeforeSend = convSnapBeforeSend.data()?.participants?.find((p: string) => p !== senderUid);
+  if (otherUidBeforeSend && (await isEitherBlocked(senderUid, otherUidBeforeSend))) {
+    throw new Error('You can no longer message this user.');
+  }
   // Message text (and the conversation's last_message preview below) are
   // encrypted before they ever reach Firestore — see crypto.ts for what
   // this does and doesn't protect against.

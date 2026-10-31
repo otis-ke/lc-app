@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import * as Location from 'expo-location';
 import { useNavigation, CommonActions } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Screen } from '../../components/Screen';
@@ -11,6 +10,7 @@ import { TextField, TextAreaField, RadioGroup, CheckboxGroup } from '../../compo
 import { Button } from '../../components/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { fetchInstructorSelfProfile, saveInstructorLocation, saveInstructorProfile } from '../../lib/instructors';
+import { describeLocationDenial, requestLocationFromGesture } from '../../lib/location';
 import { pickImage, uploadImage } from '../../lib/uploadImage';
 import { colors, fonts, radii, spacing, typography } from '../../theme/theme';
 import type { DashboardStackParamList } from '../../navigation/types';
@@ -75,21 +75,19 @@ export default function InstructorProfileEditScreen() {
   async function handleUseMyLocation() {
     if (!session) return;
     setLocating(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Location permission needed', 'Enable location access to let students find you nearby.');
-        return;
-      }
-      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      await saveInstructorLocation(session.uid, position.coords.latitude, position.coords.longitude);
-      setGeo({ lat: position.coords.latitude, lng: position.coords.longitude, updated_at: new Date().toISOString() });
-      Alert.alert('Location saved', 'Students will now see how far away you are.');
-    } catch (e: any) {
-      Alert.alert('Could not get location', e?.message ?? 'Please try again.');
-    } finally {
-      setLocating(false);
+    const result = await requestLocationFromGesture();
+    setLocating(false);
+    if (result.status === 'denied') {
+      Alert.alert('Location permission needed', describeLocationDenial(result.canAskAgain));
+      return;
     }
+    if (result.status === 'unavailable') {
+      Alert.alert('Could not get location', result.message);
+      return;
+    }
+    await saveInstructorLocation(session.uid, result.lat, result.lng);
+    setGeo({ lat: result.lat, lng: result.lng, updated_at: new Date().toISOString() });
+    Alert.alert('Location saved', 'Students will now see how far away you are.');
   }
 
   async function handleAddPhoto() {

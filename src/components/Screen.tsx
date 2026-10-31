@@ -12,6 +12,13 @@ interface ScreenProps extends ViewProps {
   refreshControl?: ScrollViewProps['refreshControl'];
 }
 
+// Deliberately NOT theme-reactive: dozens of screens still set their own
+// heading color via the frozen `typography` tokens (baked in at first
+// import, for the dark default). If this background flipped to light on
+// toggle while those headings stayed dark-mode-light-colored, text would
+// go near-invisible. Screen's own canvas stays dark until those screens are
+// migrated too — see ThemeContext.tsx for what *is* fully reactive today
+// (Card/Button/inputs/nav headers/Profile/Dashboard).
 export function Screen({ scroll = true, padded = true, edges, dark, style, children, refreshControl, ...rest }: ScreenProps) {
   const Container = scroll ? ScrollView : View;
   // padded={false} only opts a screen out of the cosmetic 20px inset (used

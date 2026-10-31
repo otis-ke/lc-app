@@ -133,6 +133,9 @@ export interface InstructorApplication {
   specialization: string;
   socials: string | null;
   status: SubmissionStatus;
+  review_note: string | null; // admin's reason, shown to the applicant on rejection
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
   created_at: string;
 }
 
@@ -209,6 +212,7 @@ export const EMPTY_DEVELOPMENT: DevelopmentProgress = {
 };
 
 export type PaymentStatus = 'paid' | 'partial' | 'unpaid' | 'overdue';
+export type ReviewStatus = 'pending' | 'approved' | 'rejected';
 
 export interface AppModelProfile {
   id: string; // = uid
@@ -230,6 +234,8 @@ export interface AppModelProfile {
   availability_notes: string | null;
   development: DevelopmentProgress;
   verified: boolean;
+  review_status: ReviewStatus;
+  review_note: string | null;
   rating_avg: number;
   rating_count: number;
   balance: number; // KSh; positive = credit, negative = owed to the school
@@ -383,7 +389,13 @@ export type NotificationType =
   | 'certificate_issued'
   | 'withdrawal_update'
   | 'finance_update'
-  | 'course_unlocked';
+  | 'course_unlocked'
+  | 'new_instructor_application'
+  | 'new_student_registered'
+  | 'new_user_registered'
+  | 'application_rejected'
+  | 'profile_rejected'
+  | 'user_reported';
 
 export interface AppNotification {
   id: string;
@@ -470,4 +482,28 @@ export interface CourseEnrollment {
   paid: boolean;
   amount_paid: number;
   enrolled_at: string;
+}
+
+// ------------------------------------------------------- Admin audit log --
+// Every approve/reject decision an admin makes, so "logs and all" is a real,
+// reviewable trail rather than just the current state of each record.
+
+export type AdminActionType =
+  | 'instructor_approved'
+  | 'instructor_rejected'
+  | 'student_approved'
+  | 'student_rejected'
+  | 'payment_recorded'
+  | 'payment_status_changed';
+
+export interface AdminAuditEntry {
+  id: string;
+  action: AdminActionType;
+  target_type: 'instructor' | 'student';
+  target_uid: string;
+  target_name: string;
+  performed_by_uid: string;
+  performed_by_name: string;
+  note: string | null;
+  created_at: string;
 }

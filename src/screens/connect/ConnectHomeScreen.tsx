@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, CommonActions } from '@react-navigation/native';
@@ -23,6 +22,7 @@ import { fetchInstructors, countInstructors } from '../../lib/content';
 import { fetchApprovedInstructorProfiles } from '../../lib/instructors';
 import { fetchModelDirectory } from '../../lib/models';
 import { distanceKm, formatDistance } from '../../lib/geo';
+import { describeLocationDenial, getLocationIfAlreadyGranted, requestLocationFromGesture } from '../../lib/location';
 import { useAuth } from '../../contexts/AuthContext';
 import type { AppInstructorProfile, AppModelProfile, Instructor } from '../../types';
 import { colors, fonts, radii, spacing, shadow, typography } from '../../theme/theme';
@@ -65,24 +65,32 @@ export default function ConnectHomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [myCoords, setMyCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [locatingMe, setLocatingMe] = useState(false);
+  const [locationMessage, setLocationMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const { status } = await Location.getForegroundPermissionsAsync();
-        let granted = status === 'granted';
-        if (!granted) {
-          const req = await Location.requestForegroundPermissionsAsync();
-          granted = req.status === 'granted';
-        }
-        if (!granted) return;
-        const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        setMyCoords({ lat: position.coords.latitude, lng: position.coords.longitude });
-      } catch {
-        // Never blocks browsing — falls back to today's default ordering.
-      }
-    })();
+    // Silent check only — never auto-prompts. Browsers in particular treat
+    // an unsolicited permission request (fired without a tap) as spam and
+    // often auto-deny it, which then poisons the permission for every later
+    // attempt too. Enabling location is always a deliberate tap below.
+    getLocationIfAlreadyGranted().then((coords) => {
+      if (coords) setMyCoords(coords);
+    });
   }, []);
+
+  async function handleEnableLocation() {
+    setLocatingMe(true);
+    setLocationMessage(null);
+    const result = await requestLocationFromGesture();
+    setLocatingMe(false);
+    if (result.status === 'granted') {
+      setMyCoords({ lat: result.lat, lng: result.lng });
+    } else if (result.status === 'denied') {
+      setLocationMessage(describeLocationDenial(result.canAskAgain));
+    } else {
+      setLocationMessage(result.message);
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -232,10 +240,40 @@ export default function ConnectHomeScreen() {
       {/* NEARBY PEOPLE — like Bolt: instructors and students who've shared
           their location, closest first. This is the first thing a signed-in
           student or a stranger who just registered sees on the home tab. */}
-      {nearbyPeople.length > 0 ? (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Nearby People</Text>
-          <Text style={styles.sectionSub}>Instructors and students near you, closest first.</Text>
+      <View style={styles.section}>
+        <View style={styles.nearbyHeaderRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.sectionTitle}>Nearby People</Text>
+            <Text style={styles.sectionSub}>Instructors and students near you, closest first.</Text>
+          </View>
+          <Pressable style={styles.mapBtn} onPress={() => navigation.navigate('NearbyMap')}>
+            <Ionicons name="map-outline" size={15} color="#fff" />
+            <Text style={styles.mapBtnText}>Map</Text>
+          </Pressable>
+        </View>
+        {nearbyPeople.length === 0 ? (
+          <>
+            <Pressable
+              style={styles.mapPromptCard}
+              disabled={locatingMe}
+              onPress={() => (myCoords ? navigation.navigate('NearbyMap') : handleEnableLocation())}
+            >
+              {locatingMe ? (
+                <ActivityIndicator color={colors.primary} />
+              ) : (
+                <Ionicons name="navigate-circle-outline" size={22} color={colors.primary} />
+              )}
+              <Text style={styles.mapPromptText}>
+                {locatingMe
+                  ? 'Getting your location…'
+                  : myCoords
+                    ? 'No one nearby has shared their location yet — open the map to check the area.'
+                    : 'Tap to turn on location and find instructors and students near you.'}
+              </Text>
+            </Pressable>
+            {locationMessage ? <Text style={styles.locationErrorText}>{locationMessage}</Text> : null}
+          </>
+        ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.cardRow} style={styles.cardRowScroll}>
             {nearbyPeople.map((p) => (
               <Pressable
@@ -267,8 +305,8 @@ export default function ConnectHomeScreen() {
               </Pressable>
             ))}
           </ScrollView>
-        </View>
-      ) : null}
+        )}
+      </View>
 
       {/* STYLE SHOWCASE — real portfolio photos pulled from instructor records */}
       <View style={[styles.section, { marginTop: spacing.xl }]}>
@@ -636,6 +674,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   distanceBadgeText: { fontFamily: fonts.bodySemiBold, fontSize: 10.5, color: '#fff' },
+  nearbyHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  mapBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: colors.ink,
+    borderRadius: radii.pill,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+  },
+  mapBtnText: { fontFamily: fonts.bodySemiBold, fontSize: 12.5, color: '#fff' },
+  mapPromptCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radii.lg,
+    padding: spacing.md,
+  },
+  mapPromptText: { flex: 1, fontFamily: fonts.body, fontSize: 13, color: colors.textMuted, lineHeight: 18 },
+  locationErrorText: { fontFamily: fonts.body, fontSize: 12, color: colors.danger, marginTop: 6, lineHeight: 16 },
   nearbyCard: {
     width: 168,
     backgroundColor: colors.surface,
